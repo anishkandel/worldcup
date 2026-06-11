@@ -19,6 +19,11 @@ export async function POST(req) {
   if (!fx) return bad("Unknown match");
   if (!["A", "D", "B"].includes(choice)) return bad("Invalid choice");
 
+  // lock voting once the match has kicked off
+  if (Date.now() >= new Date(fx.kickoff).getTime()) {
+    return bad("Voting closed — match has started");
+  }
+
   const key = voterKey(ip, fingerprint);
   const res = await castVote(matchId, key, choice);
   const tally = res.tally;

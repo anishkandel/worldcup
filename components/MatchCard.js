@@ -8,6 +8,9 @@ function fmt(n) {
   return String(n);
 }
 function pad(n) { return String(n).padStart(2, "0"); }
+function flagUrl(iso) {
+  return iso ? `https://flagcdn.com/w80/${iso}.png` : null;
+}
 
 // simple device fingerprint (no libs): screen + tz + ua hash
 function deviceFingerprint() {
@@ -22,9 +25,9 @@ function deviceFingerprint() {
 }
 
 const OPT_LABELS = (fx) => ({
-  A: { ol: fx.home.code, sub: "WIN" },
-  D: { ol: "DRAW", sub: "TIE" },
-  B: { ol: fx.away.code, sub: "WIN" },
+  A: { ol: fx.home.name, sub: "WIN", iso: fx.home.iso },
+  D: { ol: "DRAW", sub: "TIE", iso: null },
+  B: { ol: fx.away.name, sub: "WIN", iso: fx.away.iso },
 });
 
 export default function MatchCard({ fx, onToast }) {
@@ -46,6 +49,7 @@ export default function MatchCard({ fx, onToast }) {
   }, []);
 
   // restore a previous vote for this match (survives refresh)
+ // restore a previous vote for this match (survives refresh)
   useEffect(() => {
     try {
       const saved = localStorage.getItem("voted_" + fx.id);
@@ -73,7 +77,7 @@ export default function MatchCard({ fx, onToast }) {
   const s = Math.max(0, Math.floor((diff % 6e4) / 1e3));
 
   async function vote(choice) {
-    if (phase === "ft" || busy || mine) return; // locked after one vote
+    if (phase !== "open" || busy) return; // can change freely until kickoff
     setBusy(true);
     try {
       const r = await fetch("/api/vote", {
@@ -85,8 +89,7 @@ export default function MatchCard({ fx, onToast }) {
       if (!r.ok) { onToast?.(j.error || "Vote failed", true); return; }
       setTally(j.tally); setBurn(j.burn); setMine(j.your);
       try { localStorage.setItem("voted_" + fx.id, j.your); } catch {}
-      if (j.already) onToast?.("You already voted — " + OPT_LABELS(fx)[j.your].ol, true);
-      else onToast?.("Vote locked " + OPT_LABELS(fx)[j.your].ol);
+      onToast?.("Voted" + OPT_LABELS(fx)[j.your].ol + " (you can change until kickoff)");
     } catch {
       onToast?.("Network error", true);
     } finally { setBusy(false); }
@@ -108,7 +111,9 @@ export default function MatchCard({ fx, onToast }) {
 
       <div className="teams">
         <div className="team">
-          <span className="flag">{fx.home.flag}</span>
+          {flagUrl(fx.home.iso)
+            ? <img className="flag-img" src={flagUrl(fx.home.iso)} alt={fx.home.name} />
+            : <span className="flag">{fx.home.flag}</span>}
           <div className="nm">{fx.home.name}</div>
         </div>
         {phase === "ft" || phase === "live" ? (
@@ -119,7 +124,9 @@ export default function MatchCard({ fx, onToast }) {
           <div className="vs">VS</div>
         )}
         <div className="team">
-          <span className="flag">{fx.away.flag}</span>
+          {flagUrl(fx.away.iso)
+            ? <img className="flag-img" src={flagUrl(fx.away.iso)} alt={fx.away.name} />
+            : <span className="flag">{fx.away.flag}</span>}
           <div className="nm">{fx.away.name}</div>
         </div>
       </div>
@@ -145,10 +152,13 @@ export default function MatchCard({ fx, onToast }) {
               key={k}
               className={"opt" + (mine === k ? " picked" : "") + (k === "D" ? " draw" : "")}
               onClick={() => vote(k)}
-              disabled={phase === "ft" || busy || (mine && mine !== k)}
+              disabled={phase !== "open" || busy}
             >
               <div className="opt-fill" style={{ height: pct(k) + "%" }} />
               <div className="opt-inner">
+                {labels[k].iso
+                  ? <img className="oflag-img" src={flagUrl(labels[k].iso)} alt="" />
+                  : <div className="oflag">🤝</div>}
                 <div className="ol">{labels[k].ol}</div>
                 <div className="osub">{labels[k].sub}</div>
                 <div className="op">{pct(k)}%</div>
